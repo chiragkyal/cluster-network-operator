@@ -48,6 +48,9 @@ data:
 {{- if .OVN_ADMIN_NETWORK_POLICY_ENABLE }}
     enable-admin-network-policy=true
 {{- end }}
+{{- if .DNS_NAME_RESOLVER_ENABLE }}
+    enable-dns-name-resolver=true
+{{- end }}
 
     [gateway]
     mode={{.OVN_GATEWAY_MODE}}
@@ -131,6 +134,9 @@ data:
 {{- end }}
 {{- if .OVN_MULTI_NETWORK_POLICY_ENABLE }}
     enable-multi-networkpolicy=true
+{{- end }}
+{{- if .DNS_NAME_RESOLVER_ENABLE }}
+    enable-dns-name-resolver=true
 {{- end }}
 
     [gateway]
