@@ -87,7 +87,10 @@ func TestRenderOVNKubernetes(t *testing.T) {
 			},
 		},
 	}
-	featureGatesCNO := featuregates.NewFeatureGate([]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}, []configv1.FeatureGateName{})
+	featureGatesCNO := featuregates.NewFeatureGate(
+		[]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy, configv1.FeatureGateDNSNameResolver},
+		[]configv1.FeatureGateName{},
+	)
 	fakeClient := cnofake.NewFakeClient()
 
 	objs, _, err := renderOVNKubernetes(config, bootstrapResult, manifestDirOvn, fakeClient, featureGatesCNO)
@@ -145,7 +148,10 @@ func TestRenderOVNKubernetesIPv6(t *testing.T) {
 			},
 		},
 	}
-	featureGatesCNO := featuregates.NewFeatureGate([]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}, []configv1.FeatureGateName{})
+	featureGatesCNO := featuregates.NewFeatureGate(
+		[]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy, configv1.FeatureGateDNSNameResolver},
+		[]configv1.FeatureGateName{},
+	)
 	fakeClient := cnofake.NewFakeClient()
 	objs, _, err := renderOVNKubernetes(config, bootstrapResult, manifestDirOvn, fakeClient, featureGatesCNO)
 	g.Expect(err).NotTo(HaveOccurred())
@@ -174,6 +180,10 @@ func TestRenderOVNKubernetesIPv6(t *testing.T) {
 }
 
 func TestRenderedOVNKubernetesConfig(t *testing.T) {
+	featureGatesAllDisabled := configv1.CustomFeatureGates{
+		Disabled: []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver, configv1.FeatureGateAdminNetworkPolicy},
+	}
+
 	type testcase struct {
 		desc                   string
 		expected               string
@@ -185,7 +195,7 @@ func TestRenderedOVNKubernetesConfig(t *testing.T) {
 		disableGRO             bool
 		disableMultiNet        bool
 		enableMultiNetPolicies bool
-		enableAdminNetPolicies bool
+		featureGates           configv1.CustomFeatureGates
 	}
 	testcases := []testcase{
 		{
@@ -226,7 +236,8 @@ libovsdblogfile=/var/log/ovnkube/libovsdb.log
 logfile-maxsize=100
 logfile-maxbackups=5
 logfile-maxage=0`,
-			masterIPs: []string{"1.2.3.4", "2.3.4.5"},
+			masterIPs:    []string{"1.2.3.4", "2.3.4.5"},
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "custom join subnet",
@@ -269,6 +280,7 @@ logfile-maxbackups=5
 logfile-maxage=0`,
 			v4InternalSubnet: "100.99.0.0/16",
 			masterIPs:        []string{"1.2.3.4", "2.3.4.5"},
+			featureGates:     featureGatesAllDisabled,
 		},
 		{
 			desc: "HybridOverlay",
@@ -322,7 +334,8 @@ cluster-subnets="10.132.0.0/14"`,
 				RoutingViaHost: true,
 			},
 
-			masterIPs: []string{"1.2.3.4", "2.3.4.5"},
+			masterIPs:    []string{"1.2.3.4", "2.3.4.5"},
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "EgressIPConfig",
@@ -379,7 +392,8 @@ cluster-subnets="10.132.0.0/14"`,
 			egressIPConfig: &operv1.EgressIPConfig{
 				ReachabilityTotalTimeoutSeconds: ptrToUint32(3),
 			},
-			masterIPs: []string{"1.2.3.4", "2.3.4.5"},
+			masterIPs:    []string{"1.2.3.4", "2.3.4.5"},
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "EgressIPConfig with disable reachability check",
@@ -436,7 +450,8 @@ cluster-subnets="10.132.0.0/14"`,
 			egressIPConfig: &operv1.EgressIPConfig{
 				ReachabilityTotalTimeoutSeconds: ptrToUint32(0),
 			},
-			masterIPs: []string{"1.2.3.4", "2.3.4.5"},
+			masterIPs:    []string{"1.2.3.4", "2.3.4.5"},
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "HybridOverlay with custom VXLAN port",
@@ -492,7 +507,8 @@ hybrid-overlay-vxlan-port="9000"`,
 			gatewayConfig: &operv1.GatewayConfig{
 				RoutingViaHost: true,
 			},
-			masterIPs: []string{"1.2.3.4", "2.3.4.5"},
+			masterIPs:    []string{"1.2.3.4", "2.3.4.5"},
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "HybridOverlay enabled with no ClusterNetworkEntry",
@@ -539,6 +555,7 @@ enabled=true`,
 
 			hybridOverlayConfig: &operv1.HybridOverlayConfig{},
 			masterIPs:           []string{"1.2.3.4", "2.3.4.5"},
+			featureGates:        featureGatesAllDisabled,
 		},
 		{
 			desc: "Single Node OpenShift should contain SNO specific leader election settings",
@@ -587,6 +604,7 @@ election-retry-period=26`,
 			gatewayConfig: &operv1.GatewayConfig{
 				RoutingViaHost: false,
 			},
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "disable UDP aggregation",
@@ -626,8 +644,9 @@ libovsdblogfile=/var/log/ovnkube/libovsdb.log
 logfile-maxsize=100
 logfile-maxbackups=5
 logfile-maxage=0`,
-			masterIPs:  []string{"1.2.3.4", "2.3.4.5"},
-			disableGRO: true,
+			masterIPs:    []string{"1.2.3.4", "2.3.4.5"},
+			disableGRO:   true,
+			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "disabled multi-network",
@@ -668,6 +687,7 @@ logfile-maxbackups=5
 logfile-maxage=0`,
 			masterIPs:       []string{"1.2.3.4", "2.3.4.5"},
 			disableMultiNet: true,
+			featureGates:    featureGatesAllDisabled,
 		},
 		{
 			desc: "enable multi-network policies and admin network policies",
@@ -711,7 +731,10 @@ logfile-maxbackups=5
 logfile-maxage=0`,
 			masterIPs:              []string{"1.2.3.4", "2.3.4.5"},
 			enableMultiNetPolicies: true,
-			enableAdminNetPolicies: true,
+			featureGates: configv1.CustomFeatureGates{
+				Enabled:  []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
+				Disabled: []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
+			},
 		},
 		{
 			desc: "enable multi-network policies without multi-network support",
@@ -754,7 +777,55 @@ logfile-maxage=0`,
 			masterIPs:              []string{"1.2.3.4", "2.3.4.5"},
 			disableMultiNet:        true,
 			enableMultiNetPolicies: true,
-			enableAdminNetPolicies: true,
+			featureGates: configv1.CustomFeatureGates{
+				Enabled:  []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
+				Disabled: []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
+			},
+		},
+		{
+			desc: "enable dns-name resolver feature",
+			expected: `
+[default]
+mtu="1500"
+cluster-subnets="10.128.0.0/15/23,10.0.0.0/14/24"
+encap-port="8061"
+enable-lflow-cache=true
+lflow-cache-limit-kb=1048576
+enable-udp-aggregation=true
+
+[kubernetes]
+service-cidrs="172.30.0.0/16"
+ovn-config-namespace="openshift-ovn-kubernetes"
+apiserver="https://testing.test:8443"
+host-network-namespace="openshift-host-network"
+platform-type="GCP"
+healthz-bind-address="0.0.0.0:10256"
+dns-service-namespace="openshift-dns"
+dns-service-name="dns-default"
+
+[ovnkubernetesfeature]
+enable-egress-ip=true
+enable-egress-firewall=true
+enable-egress-qos=true
+enable-egress-service=true
+egressip-node-healthcheck-port=9107
+enable-multi-network=true
+enable-dns-name-resolver=true
+
+[gateway]
+mode=shared
+nodeport=true
+
+[logging]
+libovsdblogfile=/var/log/ovnkube/libovsdb.log
+logfile-maxsize=100
+logfile-maxbackups=5
+logfile-maxage=0`,
+			masterIPs: []string{"1.2.3.4", "2.3.4.5"},
+			featureGates: configv1.CustomFeatureGates{
+				Enabled:  []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
+				Disabled: []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
+			},
 		},
 	}
 	g := NewGomegaWithT(t)
@@ -802,13 +873,7 @@ logfile-maxage=0`,
 					DisableUDPAggregation: tc.disableGRO,
 				},
 			}
-			enabled := []configv1.FeatureGateName{}
-			disabled := []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}
-			if tc.enableAdminNetPolicies {
-				disabled = []configv1.FeatureGateName{}
-				enabled = []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}
-			}
-			featureGatesCNO := featuregates.NewFeatureGate(enabled, disabled)
+			featureGatesCNO := featuregates.NewFeatureGate(tc.featureGates.Enabled, tc.featureGates.Disabled)
 			fakeClient := cnofake.NewFakeClient()
 			objs, _, err := renderOVNKubernetes(config, bootstrapResult, manifestDirOvn, fakeClient, featureGatesCNO)
 			g.Expect(err).NotTo(HaveOccurred())
@@ -1821,8 +1886,10 @@ metadata:
 				},
 				PrePullerUpdateStatus: prepullerStatus,
 			}
-			featureGatesCNO := featuregates.NewFeatureGate([]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}, []configv1.FeatureGateName{})
-
+			featureGatesCNO := featuregates.NewFeatureGate(
+				[]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy, configv1.FeatureGateDNSNameResolver},
+				[]configv1.FeatureGateName{},
+			)
 			fakeClient := cnofake.NewFakeClient()
 			objs, _, err := renderOVNKubernetes(config, bootstrapResult, manifestDirOvn, fakeClient, featureGatesCNO)
 			g.Expect(err).NotTo(HaveOccurred())
@@ -2126,7 +2193,10 @@ func TestRenderOVNKubernetesDualStackPrecedenceOverUpgrade(t *testing.T) {
 			},
 		},
 	}
-	featureGatesCNO := featuregates.NewFeatureGate([]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}, []configv1.FeatureGateName{})
+	featureGatesCNO := featuregates.NewFeatureGate(
+		[]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy, configv1.FeatureGateDNSNameResolver},
+		[]configv1.FeatureGateName{},
+	)
 
 	// the new rendered config should hold the node to do the dualstack conversion
 	// the upgrade code holds the controlPlanes to update the nodes first
@@ -2224,7 +2294,10 @@ func TestRenderOVNKubernetesOVSFlowsConfigMap(t *testing.T) {
 				},
 				FlowsConfig: tc.FlowsConfig,
 			}
-			featureGatesCNO := featuregates.NewFeatureGate([]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy}, []configv1.FeatureGateName{})
+			featureGatesCNO := featuregates.NewFeatureGate(
+				[]configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy, configv1.FeatureGateDNSNameResolver},
+				[]configv1.FeatureGateName{},
+			)
 			fakeClient := cnofake.NewFakeClient()
 			objs, _, err := renderOVNKubernetes(config, bootstrapResult, manifestDirOvn, fakeClient, featureGatesCNO)
 			g.Expect(err).ToNot(HaveOccurred())
