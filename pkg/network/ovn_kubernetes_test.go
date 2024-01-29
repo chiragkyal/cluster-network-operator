@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -184,10 +185,6 @@ func TestRenderOVNKubernetesIPv6(t *testing.T) {
 }
 
 func TestRenderedOVNKubernetesConfig(t *testing.T) {
-	featureGatesAllDisabled := configv1.CustomFeatureGates{
-		Disabled: []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver, configv1.FeatureGateAdminNetworkPolicy},
-	}
-
 	type testcase struct {
 		desc                     string
 		expected                 string
@@ -199,7 +196,7 @@ func TestRenderedOVNKubernetesConfig(t *testing.T) {
 		disableGRO               bool
 		disableMultiNet          bool
 		enableMultiNetPolicies   bool
-		featureGates             configv1.CustomFeatureGates
+		enabledFeatureGates      []configv1.FeatureGateName
 	}
 	testcases := []testcase{
 		{
@@ -242,7 +239,6 @@ logfile-maxsize=100
 logfile-maxbackups=5
 logfile-maxage=0`,
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "custom join subnet",
@@ -286,7 +282,6 @@ logfile-maxbackups=5
 logfile-maxage=0`,
 			v4InternalSubnet:         "100.99.0.0/16",
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "custom masquerade subnet",
@@ -389,7 +384,6 @@ cluster-subnets="10.132.0.0/14"`,
 			},
 
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "EgressIPConfig",
@@ -448,7 +442,6 @@ cluster-subnets="10.132.0.0/14"`,
 				ReachabilityTotalTimeoutSeconds: ptrToUint32(3),
 			},
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "EgressIPConfig with disable reachability check",
@@ -507,7 +500,6 @@ cluster-subnets="10.132.0.0/14"`,
 				ReachabilityTotalTimeoutSeconds: ptrToUint32(0),
 			},
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "HybridOverlay with custom VXLAN port",
@@ -565,7 +557,6 @@ hybrid-overlay-vxlan-port="9000"`,
 				RoutingViaHost: true,
 			},
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "HybridOverlay enabled with no ClusterNetworkEntry",
@@ -613,7 +604,6 @@ enabled=true`,
 
 			hybridOverlayConfig:      &operv1.HybridOverlayConfig{},
 			controlPlaneReplicaCount: 2,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "Single Node OpenShift should contain SNO specific leader election settings",
@@ -663,7 +653,6 @@ election-retry-period=26`,
 			gatewayConfig: &operv1.GatewayConfig{
 				RoutingViaHost: false,
 			},
-			featureGates: featureGatesAllDisabled,
 		},
 		{
 			desc: "disable UDP aggregation",
@@ -706,7 +695,6 @@ logfile-maxbackups=5
 logfile-maxage=0`,
 			controlPlaneReplicaCount: 2,
 			disableGRO:               true,
-			featureGates:             featureGatesAllDisabled,
 		},
 		{
 			desc: "disabled multi-network",
@@ -749,7 +737,6 @@ logfile-maxage=0`,
 			controlPlaneReplicaCount: 2,
 
 			disableMultiNet: true,
-			featureGates:    featureGatesAllDisabled,
 		},
 		{
 			desc: "enable multi-network policies and admin network policies",
@@ -795,10 +782,7 @@ logfile-maxage=0`,
 			controlPlaneReplicaCount: 2,
 
 			enableMultiNetPolicies: true,
-			featureGates: configv1.CustomFeatureGates{
-				Enabled:  []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
-				Disabled: []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
-			},
+			enabledFeatureGates:    []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
 		},
 		{
 			desc: "enable multi-network policies without multi-network support",
@@ -842,10 +826,7 @@ logfile-maxage=0`,
 			controlPlaneReplicaCount: 2,
 			disableMultiNet:          true,
 			enableMultiNetPolicies:   true,
-			featureGates: configv1.CustomFeatureGates{
-				Enabled:  []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
-				Disabled: []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
-			},
+			enabledFeatureGates:      []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
 		},
 		{
 			desc: "enable dns-name resolver feature",
@@ -888,10 +869,7 @@ logfile-maxsize=100
 logfile-maxbackups=5
 logfile-maxage=0`,
 			controlPlaneReplicaCount: 2,
-			featureGates: configv1.CustomFeatureGates{
-				Enabled:  []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
-				Disabled: []configv1.FeatureGateName{configv1.FeatureGateAdminNetworkPolicy},
-			},
+			enabledFeatureGates:      []configv1.FeatureGateName{configv1.FeatureGateDNSNameResolver},
 		},
 	}
 	g := NewGomegaWithT(t)
@@ -942,7 +920,22 @@ logfile-maxage=0`,
 					DisableUDPAggregation: tc.disableGRO,
 				},
 			}
-			featureGatesCNO := featuregates.NewFeatureGate(tc.featureGates.Enabled, tc.featureGates.Disabled)
+
+			knownFeatureGates := []configv1.FeatureGateName{
+				configv1.FeatureGateAdminNetworkPolicy,
+				configv1.FeatureGateDNSNameResolver,
+			}
+			enabled := []configv1.FeatureGateName{}
+			disabled := []configv1.FeatureGateName{}
+			for _, f := range knownFeatureGates {
+				if slices.Contains(tc.enabledFeatureGates, f) {
+					enabled = append(enabled, f)
+				} else {
+					disabled = append(disabled, f)
+				}
+			}
+
+			featureGatesCNO := featuregates.NewFeatureGate(enabled, disabled)
 			fakeClient := cnofake.NewFakeClient()
 			objs, _, err := renderOVNKubernetes(config, bootstrapResult, manifestDirOvn, fakeClient, featureGatesCNO)
 			g.Expect(err).NotTo(HaveOccurred())
