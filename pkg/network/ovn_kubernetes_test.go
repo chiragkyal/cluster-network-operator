@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -882,10 +882,11 @@ logfile-maxage=0`,
 				configv1.FeatureGateAdminNetworkPolicy,
 				configv1.FeatureGateDNSNameResolver,
 			}
+			s := sets.New[configv1.FeatureGateName](tc.enabledFeatureGates...)
 			enabled := []configv1.FeatureGateName{}
 			disabled := []configv1.FeatureGateName{}
 			for _, f := range knownFeatureGates {
-				if slices.Contains(tc.enabledFeatureGates, f) {
+				if s.Has(f) {
 					enabled = append(enabled, f)
 				} else {
 					disabled = append(disabled, f)
